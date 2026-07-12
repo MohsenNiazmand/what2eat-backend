@@ -1,0 +1,64 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String        @id @default(uuid())
+  mobile       String        @unique
+  name         String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  sessions     Session[]
+  preferences  Preference?
+  favorites    Favorite[]
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model Preference {
+  id                 String   @id @default(uuid())
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dietaryRestrictions String[] // e.g. ["Vegan", "Gluten-free"]
+  preferredCuisines   String[] // e.g. ["Persian", "Italian"]
+  updatedAt          DateTime @updatedAt
+}
+
+model Recipe {
+  id           String     @id @default(uuid())
+  title        String
+  description  String?
+  ingredients  Json       // Array of ingredients with quantities
+  instructions String[]   // Steps
+  category     String?
+  prepTime     Int?       // in minutes
+  cookTime     Int?       // in minutes
+  servings     Int?
+  image        String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  favoritedBy  Favorite[]
+}
+
+model Favorite {
+  id        String   @id @default(uuid())
+  userId    String
+  recipeId  String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recipe    Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, recipeId])
+}
