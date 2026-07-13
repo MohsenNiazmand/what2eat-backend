@@ -3,6 +3,7 @@ import { UserRepository } from '../../../infrastructure/database/UserRepository.
 import { SessionRepository } from '../../../infrastructure/database/SessionRepository.js';
 import { TokenService } from '../../../infrastructure/auth/TokenService.js';
 import { AuthService } from '../../../application/auth/AuthService.js';
+import { UpdateProfileUseCase } from '../../../application/user/UpdateProfileUseCase.js';
 
 const authService = new AuthService(
   new OtpRepository(),
@@ -10,6 +11,8 @@ const authService = new AuthService(
   new SessionRepository(),
   new TokenService()
 );
+
+const updateProfileUseCase = new UpdateProfileUseCase(new UserRepository());
 
 export async function requestOtp(req, res, next) {
   try {
@@ -38,8 +41,18 @@ export async function me(req, res, next) {
       data: {
         id: req.user.id,
         mobileNumber: req.user.mobileNumber,
+        name: req.user.name,
       },
     });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function updateProfile(req, res, next) {
+  try {
+    const result = await updateProfileUseCase.execute(req.user.id, req.body);
+    res.status(200).json({ success: true, data: result });
   } catch (error) {
     next(error);
   }

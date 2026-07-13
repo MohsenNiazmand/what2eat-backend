@@ -12,4 +12,11 @@ export class UserRepository {
   async create(mobile) {
     return prisma.user.create({ data: { mobile } });
   }
+
+  async updateName(id, name) {
+    return prisma.user.update({
+      where: { id },
+      data: { name },
+    });
+  }
 }

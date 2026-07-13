@@ -60,6 +60,7 @@ describe('Auth middleware and session management', () => {
       data: {
         id: expect.any(String),
         mobileNumber: TEST_MOBILE,
+        name: null,
       },
     });
   });

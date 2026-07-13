@@ -36,6 +36,7 @@ export async function authMiddleware(req, res, next) {
       id: user.id,
       deviceId: payload.deviceId,
       mobileNumber: user.mobile,
+      name: user.name,
     };
 
     next();

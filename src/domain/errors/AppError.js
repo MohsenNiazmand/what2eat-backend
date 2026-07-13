@@ -18,6 +18,12 @@ export class UnauthorizedError extends AppError {
   }
 }
 
+export class NotFoundError extends AppError {
+  constructor(message = 'Resource not found') {
+    super(message, 404);
+  }
+}
+
 export class ExternalServiceError extends AppError {
   constructor(message = 'External service failure') {
     super(message, 502);
