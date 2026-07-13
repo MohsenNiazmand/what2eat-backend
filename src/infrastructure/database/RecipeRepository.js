@@ -21,4 +21,33 @@ export class RecipeRepository extends IRecipeRepository {
   async findById(id) {
     return prisma.recipe.findUnique({ where: { id } });
   }
+
+  async search({ q, category, page, limit }) {
+    const where = {};
+
+    if (category) {
+      where.category = { equals: category, mode: 'insensitive' };
+    }
+
+    if (q) {
+      where.OR = [
+        { title: { contains: q, mode: 'insensitive' } },
+        { description: { contains: q, mode: 'insensitive' } },
+      ];
+    }
+
+    const skip = (page - 1) * limit;
+
+    const [items, total] = await Promise.all([
+      prisma.recipe.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.recipe.count({ where }),
+    ]);
+
+    return { items, total };
+  }
 }

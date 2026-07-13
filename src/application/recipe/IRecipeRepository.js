@@ -16,4 +16,13 @@ export class IRecipeRepository {
   async findById(id) {
     throw new Error('IRecipeRepository.findById() must be implemented');
   }
+
+  /**
+   * @param {{ q?: string, category?: string, page: number, limit: number }} params
+   * @returns {Promise<{ items: object[], total: number }>}
+   */
+  // eslint-disable-next-line no-unused-vars
+  async search(params) {
+    throw new Error('IRecipeRepository.search() must be implemented');
+  }
 }
