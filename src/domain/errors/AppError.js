@@ -24,6 +24,12 @@ export class NotFoundError extends AppError {
   }
 }
 
+export class ConflictError extends AppError {
+  constructor(message = 'Resource conflict') {
+    super(message, 409);
+  }
+}
+
 export class ExternalServiceError extends AppError {
   constructor(message = 'External service failure') {
     super(message, 502);

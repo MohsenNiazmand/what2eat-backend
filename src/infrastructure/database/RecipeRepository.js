@@ -17,4 +17,8 @@ export class RecipeRepository extends IRecipeRepository {
       },
     });
   }
+
+  async findById(id) {
+    return prisma.recipe.findUnique({ where: { id } });
+  }
 }
