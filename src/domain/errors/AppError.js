@@ -17,3 +17,9 @@ export class UnauthorizedError extends AppError {
     super(message, 401);
   }
 }
+
+export class ExternalServiceError extends AppError {
+  constructor(message = 'External service failure') {
+    super(message, 502);
+  }
+}
