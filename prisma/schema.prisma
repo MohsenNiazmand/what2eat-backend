@@ -21,6 +21,7 @@ model User {
 model Session {
   id        String   @id @default(uuid())
   token     String   @unique
+  deviceId  String
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime

@@ -11,3 +11,9 @@ export class ValidationError extends AppError {
     super(message, 400);
   }
 }
+
+export class UnauthorizedError extends AppError {
+  constructor(message = 'Invalid or expired OTP') {
+    super(message, 401);
+  }
+}
