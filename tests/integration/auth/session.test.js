@@ -63,4 +63,76 @@ describe('Auth middleware and session management', () => {
       },
     });
   });
+
+  it('should issue a new access token when a valid refresh token is provided', async () => {
+    await request(app)
+      .post('/api/auth/otp/request')
+      .send({ mobileNumber: TEST_MOBILE, deviceId: TEST_DEVICE_ID });
+
+    const verifyResponse = await request(app)
+      .post('/api/auth/otp/verify')
+      .send({
+        mobileNumber: TEST_MOBILE,
+        otpCode: '123456',
+        deviceId: TEST_DEVICE_ID,
+      });
+
+    const response = await request(app)
+      .post('/api/auth/refresh')
+      .send({
+        refreshToken: verifyResponse.body.refreshToken,
+        deviceId: TEST_DEVICE_ID,
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toHaveProperty('accessToken');
+    expect(response.body.accessToken).not.toBe(verifyResponse.body.accessToken);
+  });
+
+  it('should revoke the current session on logout', async () => {
+    await request(app)
+      .post('/api/auth/otp/request')
+      .send({ mobileNumber: TEST_MOBILE, deviceId: TEST_DEVICE_ID });
+
+    const verifyResponse = await request(app)
+      .post('/api/auth/otp/verify')
+      .send({
+        mobileNumber: TEST_MOBILE,
+        otpCode: '123456',
+        deviceId: TEST_DEVICE_ID,
+      });
+
+    const logoutResponse = await request(app)
+      .post('/api/auth/logout')
+      .set('Authorization', `Bearer ${verifyResponse.body.accessToken}`);
+
+    expect(logoutResponse.status).toBe(200);
+
+    const protectedResponse = await request(app)
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${verifyResponse.body.accessToken}`);
+
+    expect(protectedResponse.status).toBe(401);
+  });
+
+  it('should reject refresh requests with an invalid refresh token', async () => {
+    const response = await request(app)
+      .post('/api/auth/refresh')
+      .send({
+        refreshToken: 'invalid-token',
+        deviceId: TEST_DEVICE_ID,
+      });
+
+    expect(response.status).toBe(401);
+    expect(response.body).toHaveProperty('success', false);
+  });
+
+  it('should reject protected requests with an invalid bearer token', async () => {
+    const response = await request(app)
+      .get('/api/auth/me')
+      .set('Authorization', 'Bearer invalid-token');
+
+    expect(response.status).toBe(401);
+    expect(response.body).toHaveProperty('success', false);
+  });
 });

@@ -27,4 +27,23 @@ export class SessionRepository {
       },
     });
   }
+
+  async findByToken(token) {
+    return prisma.session.findFirst({
+      where: {
+        token,
+        expiresAt: {
+          gt: new Date(),
+        },
+      },
+    });
+  }
+
+  async deleteByToken(token) {
+    return prisma.session.deleteMany({ where: { token } });
+  }
+
+  async deleteByUserAndDevice(userId, deviceId) {
+    return prisma.session.deleteMany({ where: { userId, deviceId } });
+  }
 }

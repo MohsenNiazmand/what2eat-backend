@@ -44,3 +44,22 @@ export async function me(req, res, next) {
     next(error);
   }
 }
+
+export async function refresh(req, res, next) {
+  try {
+    const { refreshToken, deviceId } = req.body;
+    const result = await authService.refreshAccessToken(refreshToken, deviceId);
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function logout(req, res, next) {
+  try {
+    const result = await authService.logout(req.user.id, req.user.deviceId);
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}

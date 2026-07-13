@@ -83,6 +83,41 @@ export class AuthService {
     };
   }
 
+  async refreshAccessToken(refreshToken, deviceId) {
+    if (!deviceId) {
+      throw new ValidationError('deviceId is required');
+    }
+
+    if (!refreshToken) {
+      throw new ValidationError('refreshToken is required');
+    }
+
+    let payload;
+    try {
+      payload = this.tokenService.verifyRefreshToken(refreshToken);
+    } catch (error) {
+      throw new UnauthorizedError('Invalid or expired refresh token');
+    }
+
+    const session = await this.sessionRepository.findByToken(refreshToken);
+
+    if (!session || session.deviceId !== deviceId || session.userId !== payload.userId) {
+      throw new UnauthorizedError('Invalid or expired refresh token');
+    }
+
+    const accessToken = this.tokenService.generateAccessToken(payload.userId, deviceId);
+    return { accessToken };
+  }
+
+  async logout(userId, deviceId) {
+    if (!userId) {
+      throw new ValidationError('userId is required');
+    }
+
+    await this.sessionRepository.deleteByUserAndDevice(userId, deviceId);
+    return { success: true, message: 'Logged out successfully' };
+  }
+
   _generateOtp() {
     return String(Math.floor(100000 + Math.random() * 900000));
   }
