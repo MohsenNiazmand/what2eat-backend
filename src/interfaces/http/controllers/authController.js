@@ -30,3 +30,17 @@ export async function verifyOtp(req, res, next) {
     next(error);
   }
 }
+
+export async function me(req, res, next) {
+  try {
+    res.status(200).json({
+      success: true,
+      data: {
+        id: req.user.id,
+        mobileNumber: req.user.mobileNumber,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+}

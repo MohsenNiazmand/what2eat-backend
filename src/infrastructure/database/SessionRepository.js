@@ -15,4 +15,16 @@ export class SessionRepository {
       },
     });
   }
+
+  async findActiveSession(userId, deviceId) {
+    return prisma.session.findFirst({
+      where: {
+        userId,
+        deviceId,
+        expiresAt: {
+          gt: new Date(),
+        },
+      },
+    });
+  }
 }

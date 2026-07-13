@@ -5,6 +5,10 @@ export class UserRepository {
     return prisma.user.findUnique({ where: { mobile } });
   }
 
+  async findById(id) {
+    return prisma.user.findUnique({ where: { id } });
+  }
+
   async create(mobile) {
     return prisma.user.create({ data: { mobile } });
   }

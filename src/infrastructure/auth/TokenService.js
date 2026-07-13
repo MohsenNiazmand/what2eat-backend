@@ -17,6 +17,10 @@ export class TokenService {
     });
   }
 
+  verifyAccessToken(token) {
+    return jwt.verify(token, this._getSecret());
+  }
+
   getRefreshTokenExpiry() {
     return new Date(Date.now() + REFRESH_TOKEN_TTL_MS);
   }
