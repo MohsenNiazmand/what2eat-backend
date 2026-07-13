@@ -47,6 +47,7 @@ model Recipe {
   prepTime     Int?       // in minutes
   cookTime     Int?       // in minutes
   servings     Int?
+  calories     Int?
   image        String?
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
