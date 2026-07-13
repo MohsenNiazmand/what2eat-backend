@@ -14,8 +14,8 @@ const validGeneratedRecipe = {
 
 const mockGenerate = jest.fn();
 
-jest.unstable_mockModule('../../../src/infrastructure/ai/DeepSeekClient.js', () => ({
-  DeepSeekClient: jest.fn().mockImplementation(() => ({
+jest.unstable_mockModule('../../../src/infrastructure/ai/recipeGeneratorFactory.js', () => ({
+  createRecipeGenerator: jest.fn().mockImplementation(() => ({
     generate: mockGenerate,
   })),
 }));

@@ -2,14 +2,14 @@ import { PromptBuilder } from '../../../application/recipe/PromptBuilder.js';
 import { GenerateRecipeUseCase } from '../../../application/recipe/GenerateRecipeUseCase.js';
 import { ListRecipesUseCase } from '../../../application/recipe/ListRecipesUseCase.js';
 import { GetRecipeUseCase } from '../../../application/recipe/GetRecipeUseCase.js';
-import { DeepSeekClient } from '../../../infrastructure/ai/DeepSeekClient.js';
+import { createRecipeGenerator } from '../../../infrastructure/ai/recipeGeneratorFactory.js';
 import { RecipeRepository } from '../../../infrastructure/database/RecipeRepository.js';
 
 const recipeRepository = new RecipeRepository();
 
 const generateRecipeUseCase = new GenerateRecipeUseCase(
   new PromptBuilder(),
-  new DeepSeekClient(),
+  createRecipeGenerator(),
   recipeRepository
 );
 
