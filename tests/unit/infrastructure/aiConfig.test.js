@@ -5,6 +5,7 @@ const ENV_KEYS = [
   'AI_BASE_URL',
   'AI_API_KEY',
   'AI_MODEL',
+  'AI_TEMPERATURE',
   'DEEPSEEK_API_KEY',
   'DEEPSEEK_BASE_URL',
 ];
@@ -41,7 +42,20 @@ describe('getAiConfig', () => {
       baseURL: 'https://api.example.com/v1',
       apiKey: 'ai-key-123',
       model: 'gpt-4o-mini',
+      temperature: 0.3,
     });
+  });
+
+  it('reads AI_TEMPERATURE when set to a valid number', () => {
+    process.env.AI_TEMPERATURE = '0.5';
+
+    expect(getAiConfig().temperature).toBe(0.5);
+  });
+
+  it('falls back to default temperature when AI_TEMPERATURE is invalid', () => {
+    process.env.AI_TEMPERATURE = 'not-a-number';
+
+    expect(getAiConfig().temperature).toBe(0.3);
   });
 
   it('falls back to DEEPSEEK_* when AI_* are absent', () => {
@@ -53,6 +67,7 @@ describe('getAiConfig', () => {
       baseURL: 'https://custom.deepseek.com',
       apiKey: 'deepseek-key',
       model: 'deepseek-chat',
+      temperature: 0.3,
     });
   });
 
@@ -62,6 +77,7 @@ describe('getAiConfig', () => {
       baseURL: 'https://api.deepseek.com',
       apiKey: undefined,
       model: 'deepseek-chat',
+      temperature: 0.3,
     });
   });
 });

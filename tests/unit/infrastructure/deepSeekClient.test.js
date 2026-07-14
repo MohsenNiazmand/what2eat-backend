@@ -68,7 +68,7 @@ describe('DeepSeekClient', () => {
           { role: 'user', content: validPrompt.user },
         ],
         response_format: { type: 'json_object' },
-        temperature: 0.7,
+        temperature: 0.3,
         stream: false,
       }),
       expect.objectContaining({
@@ -80,8 +80,47 @@ describe('DeepSeekClient', () => {
     );
   });
 
+  it('uses AI_TEMPERATURE from env when set', async () => {
+    const originalTemperature = process.env.AI_TEMPERATURE;
+    process.env.AI_TEMPERATURE = '0.5';
+
+    const { client, httpClient } = makeClient({ apiKey: 'test-key', bodyContent: JSON.stringify(validRecipe) });
+
+    await client.generate(validPrompt);
+
+    expect(httpClient.post).toHaveBeenCalledWith(
+      '/chat/completions',
+      expect.objectContaining({ temperature: 0.5 }),
+      expect.any(Object)
+    );
+
+    if (originalTemperature === undefined) {
+      delete process.env.AI_TEMPERATURE;
+    } else {
+      process.env.AI_TEMPERATURE = originalTemperature;
+    }
+  });
+
   it('returns the parsed recipe when DeepSeek returns valid JSON', async () => {
     const { client } = makeClient({ apiKey: 'test-key', bodyContent: JSON.stringify(validRecipe) });
+
+    const result = await client.generate(validPrompt);
+
+    expect(result).toEqual(validRecipe);
+  });
+
+  it('normalizes numeric fields returned as Persian-digit strings', async () => {
+    const recipeWithPersianNumbers = {
+      ...validRecipe,
+      calories: '۳۰۰',
+      prepTime: '۱۰',
+      cookTime: '۲۰',
+      servings: '۲',
+    };
+    const { client } = makeClient({
+      apiKey: 'test-key',
+      bodyContent: JSON.stringify(recipeWithPersianNumbers),
+    });
 
     const result = await client.generate(validPrompt);
 

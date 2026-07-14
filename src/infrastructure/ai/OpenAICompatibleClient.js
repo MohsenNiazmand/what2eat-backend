@@ -10,6 +10,7 @@ export class OpenAICompatibleClient extends IRecipeGenerator {
     this.apiKey = apiKey ?? config.apiKey;
     this.baseURL = baseURL ?? config.baseURL;
     this.model = model ?? config.model;
+    this.temperature = config.temperature;
     this.httpClient = httpClient ?? axios.create({ baseURL: this.baseURL });
   }
 
@@ -28,7 +29,7 @@ export class OpenAICompatibleClient extends IRecipeGenerator {
             { role: 'user', content: user },
           ],
           response_format: { type: 'json_object' },
-          temperature: 0.7,
+          temperature: this.temperature,
           stream: false,
         },
         {
@@ -48,6 +49,8 @@ export class OpenAICompatibleClient extends IRecipeGenerator {
         throw new ExternalServiceError('DeepSeek returned invalid JSON');
       }
 
+      recipe = this._normalizeRecipe(recipe);
+
       if (!this._isValidRecipe(recipe)) {
         throw new ExternalServiceError('DeepSeek response does not match the expected recipe schema');
       }
@@ -60,6 +63,36 @@ export class OpenAICompatibleClient extends IRecipeGenerator {
 
       throw new ExternalServiceError('Failed to reach DeepSeek API');
     }
+  }
+
+  _normalizeRecipe(recipe) {
+    if (!recipe || typeof recipe !== 'object') {
+      return recipe;
+    }
+
+    for (const key of ['calories', 'prepTime', 'cookTime', 'servings']) {
+      recipe[key] = this._toNumber(recipe[key]);
+    }
+
+    return recipe;
+  }
+
+  _toNumber(value) {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+
+    if (typeof value !== 'string') {
+      return value;
+    }
+
+    const normalized = value
+      .trim()
+      .replace(/[۰-۹]/g, (digit) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)))
+      .replace(/[^\d.-]/g, '');
+    const parsed = Number(normalized);
+
+    return Number.isFinite(parsed) ? parsed : value;
   }
 
   _isValidRecipe(recipe) {

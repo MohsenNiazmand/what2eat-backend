@@ -1,0 +1,719 @@
+{
+  "info": {
+    "_postman_id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+    "name": "What2Eat API",
+    "description": "Complete What2Eat backend API collection.\n\n## Quick start\n1. Import `What2Eat-Local.postman_environment.json` and set `deepseekApiKey` from your `.env`.\n2. Run **Health → GET /health** to confirm the server is up.\n3. Run **Auth → Request OTP** then **Verify OTP** — tokens are saved automatically.\n4. Use protected routes with the saved `accessToken`.\n5. For DeepSeek diagnostics, use the **DeepSeek (Direct)** folder (calls DeepSeek API directly, no backend).\n\n## Dev OTP\nIn non-production (`NODE_ENV=development`), OTP is always `123456`.\n\n## Endpoints (17)\n| Method | Path |\n|--------|------|\n| GET | /health |\n| POST | /api/auth/otp/request |\n| POST | /api/auth/otp/verify |\n| POST | /api/auth/refresh |\n| POST | /api/auth/logout |\n| GET | /api/auth/me |\n| PATCH | /api/auth/me |\n| GET | /api/recipes |\n| GET | /api/recipes/:id |\n| POST | /api/recipes/generate |\n| GET | /api/preferences |\n| PUT | /api/preferences |\n| DELETE | /api/preferences |\n| GET | /api/favorites |\n| POST | /api/favorites |\n| DELETE | /api/favorites/:recipeId |",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "mobileNumber", "value": "09123456789" },
+    { "key": "deviceId", "value": "550e8400-e29b-41d4-a716-446655440000" },
+    { "key": "otpCode", "value": "123456" },
+    { "key": "accessToken", "value": "" },
+    { "key": "refreshToken", "value": "" },
+    { "key": "recipeId", "value": "" },
+    { "key": "deepseekBaseUrl", "value": "https://api.deepseek.com" },
+    { "key": "deepseekApiKey", "value": "" },
+    { "key": "aiModel", "value": "deepseek-chat" },
+    { "key": "aiTemperature", "value": "0.3" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET /health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/health",
+            "description": "Checks server, PostgreSQL, and Redis status.\n\nReturns `UP` or `DEGRADED` with per-service status."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Has status field', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body).to.have.property('status');",
+                  "  pm.expect(body).to.have.property('database');",
+                  "  pm.expect(body).to.have.property('redis');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "description": "OTP-based authentication. Run **Request OTP** then **Verify OTP** in order.\n\nVerify OTP saves `accessToken` and `refreshToken` to collection/environment variables.",
+      "item": [
+        {
+          "name": "Request OTP",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mobileNumber\": \"{{mobileNumber}}\",\n  \"deviceId\": \"{{deviceId}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/otp/request",
+            "description": "Sends OTP to mobile. Dev mode always uses OTP `123456`."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('OTP sent', () => {",
+                  "  pm.expect(pm.response.json().success).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify OTP",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mobileNumber\": \"{{mobileNumber}}\",\n  \"otpCode\": \"{{otpCode}}\",\n  \"deviceId\": \"{{deviceId}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/otp/verify",
+            "description": "Verifies OTP and returns JWT tokens. Saves tokens automatically."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "const body = pm.response.json();",
+                  "if (body.accessToken) {",
+                  "  pm.collectionVariables.set('accessToken', body.accessToken);",
+                  "  pm.environment.set('accessToken', body.accessToken);",
+                  "}",
+                  "if (body.refreshToken) {",
+                  "  pm.collectionVariables.set('refreshToken', body.refreshToken);",
+                  "  pm.environment.set('refreshToken', body.refreshToken);",
+                  "}",
+                  "",
+                  "pm.test('Tokens received', () => {",
+                  "  pm.expect(body.accessToken).to.be.a('string').and.not.empty;",
+                  "  pm.expect(body.refreshToken).to.be.a('string').and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\",\n  \"deviceId\": \"{{deviceId}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/refresh",
+            "description": "Issues a new access token using the refresh token."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "if (body.accessToken) {",
+                  "  pm.collectionVariables.set('accessToken', body.accessToken);",
+                  "  pm.environment.set('accessToken', body.accessToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/auth/logout",
+            "description": "Invalidates the current session for this device."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Profile",
+      "item": [
+        {
+          "name": "GET /api/auth/me",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/auth/me"
+          },
+          "response": []
+        },
+        {
+          "name": "PATCH /api/auth/me",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Ali\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/me",
+            "description": "Update display name. Send `{ \"name\": \"...\" }`."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Recipes",
+      "item": [
+        {
+          "name": "List Recipes",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/recipes?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "recipes"],
+              "query": [
+                { "key": "page", "value": "1", "description": "Page number (default 1)" },
+                { "key": "limit", "value": "10", "description": "Items per page (max 100)" },
+                { "key": "q", "value": "", "description": "Search by title", "disabled": true },
+                { "key": "category", "value": "", "description": "Filter by category", "disabled": true }
+              ]
+            },
+            "description": "Paginated recipe list with optional search (`q`) and category filter."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const items = pm.response.json().data?.items;",
+                  "  if (Array.isArray(items) && items.length > 0) {",
+                  "    pm.collectionVariables.set('recipeId', items[0].id);",
+                  "    pm.environment.set('recipeId', items[0].id);",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Search Recipes (q)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/recipes?q=قورمه",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "recipes"],
+              "query": [{ "key": "q", "value": "قورمه" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Filter by Category",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/recipes?category=کباب",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "recipes"],
+              "query": [{ "key": "category", "value": "کباب" }]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Recipe by ID",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/recipes/{{recipeId}}",
+            "description": "Uses `recipeId` variable (set by List or Generate)."
+          },
+          "response": []
+        },
+        {
+          "name": "Generate Recipe (AI)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ingredients\": [\"گوجه\", \"پیاز\", \"گوشت چرخ‌کرده\"],\n  \"tools\": [\"تابه\"],\n  \"calorieLimit\": 500,\n  \"servings\": 2\n}"
+            },
+            "url": "{{baseUrl}}/api/recipes/generate",
+            "description": "Calls DeepSeek via backend. Requires valid `AI_API_KEY` in server `.env`.\n\n**Body fields:**\n- `ingredients` (required): string[]\n- `tools` (optional): string[]\n- `calorieLimit` (optional): number — whole dish, all servings\n- `servings` (optional): positive integer\n\nReturns 201 with saved recipe or 502 on AI failure."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const id = pm.response.json().data?.id;",
+                  "  if (id) {",
+                  "    pm.collectionVariables.set('recipeId', id);",
+                  "    pm.environment.set('recipeId', id);",
+                  "    console.log('Saved recipeId:', id);",
+                  "  }",
+                  "}",
+                  "",
+                  "pm.test('Generate succeeded or AI error is explicit', () => {",
+                  "  pm.expect([201, 400, 502]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Generate Recipe (minimal)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ingredients\": [\"گوجه\"]\n}"
+            },
+            "url": "{{baseUrl}}/api/recipes/generate"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Preferences",
+      "item": [
+        {
+          "name": "GET /api/preferences",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/preferences",
+            "description": "Returns 404 if user has no preferences yet."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT /api/preferences (upsert)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dietaryRestrictions\": [\"vegetarian\"],\n  \"preferredCuisines\": [\"ایرانی\", \"mediterranean\"]\n}"
+            },
+            "url": "{{baseUrl}}/api/preferences",
+            "description": "Create or update preferences. Both arrays are required."
+          },
+          "response": []
+        },
+        {
+          "name": "DELETE /api/preferences",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/api/preferences"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Favorites",
+      "item": [
+        {
+          "name": "List Favorites",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/favorites"
+          },
+          "response": []
+        },
+        {
+          "name": "Add Favorite",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recipeId\": \"{{recipeId}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/favorites",
+            "description": "Requires a valid `recipeId` (from List or Generate)."
+          },
+          "response": []
+        },
+        {
+          "name": "Remove Favorite",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": "{{baseUrl}}/api/favorites/{{recipeId}}"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "DeepSeek (Direct)",
+      "description": "Direct calls to DeepSeek API — bypasses What2Eat backend.\n\nSet `deepseekApiKey` in environment (same as `AI_API_KEY` in `.env`).\n\nUse these to:\n- Verify API key and balance\n- Inspect `usage.prompt_cache_hit_tokens` / `prompt_cache_miss_tokens`\n- Test recipe JSON output before going through the backend",
+      "item": [
+        {
+          "name": "Ping — Simple Completion",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{deepseekApiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"{{aiModel}}\",\n  \"messages\": [\n    { \"role\": \"user\", \"content\": \"Reply with exactly: OK\" }\n  ],\n  \"temperature\": {{aiTemperature}},\n  \"max_tokens\": 10,\n  \"stream\": false\n}"
+            },
+            "url": "{{deepseekBaseUrl}}/chat/completions",
+            "description": "Minimal request to verify API key, connectivity, and balance.\n\nExpected: 200 with `choices[0].message.content` containing \"OK\"."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const key = pm.environment.get('deepseekApiKey') || pm.collectionVariables.get('deepseekApiKey');",
+                  "if (!key) {",
+                  "  console.warn('Set deepseekApiKey in environment (from AI_API_KEY in .env)');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('DeepSeek reachable', () => {",
+                  "  pm.expect([200, 401, 402]).to.include(pm.response.code);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "  const usage = pm.response.json().usage;",
+                  "  if (usage) {",
+                  "    console.log('prompt_tokens:', usage.prompt_tokens);",
+                  "    console.log('completion_tokens:', usage.completion_tokens);",
+                  "    console.log('cache_hit:', usage.prompt_cache_hit_tokens ?? 0);",
+                  "    console.log('cache_miss:', usage.prompt_cache_miss_tokens ?? 0);",
+                  "  }",
+                  "}",
+                  "",
+                  "if (pm.response.code === 402) {",
+                  "  console.error('Insufficient balance — top up at platform.deepseek.com');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Recipe JSON — Same as Backend",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{deepseekApiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"{{aiModel}}\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"شما یک آشپز فارسی هستید. فقط JSON معتبر برگردانید با کلیدهای title, description, ingredients, instructions, calories, prepTime, cookTime, servings, category.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"یک دستور پخت برای مواد: گوجه، پیاز. فقط با این ابزارها: تابه. سقف کالری کل غذا (همه‌ی پرس‌ها): حداکثر 500 کالری. برای 2 نفر\"\n    }\n  ],\n  \"response_format\": { \"type\": \"json_object\" },\n  \"temperature\": {{aiTemperature}},\n  \"stream\": false\n}"
+            },
+            "url": "{{deepseekBaseUrl}}/chat/completions",
+            "description": "Mirrors the backend request shape (`response_format: json_object`, temperature from env).\n\nRun twice with the **same system prompt** to observe cache hits in the Console tab."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "const json = pm.response.json();",
+                  "const content = json.choices?.[0]?.message?.content;",
+                  "",
+                  "pm.test('Returns JSON content', () => {",
+                  "  pm.expect(content).to.be.a('string');",
+                  "  JSON.parse(content);",
+                  "});",
+                  "",
+                  "const usage = json.usage;",
+                  "if (usage) {",
+                  "  const hit = usage.prompt_cache_hit_tokens ?? 0;",
+                  "  const miss = usage.prompt_cache_miss_tokens ?? 0;",
+                  "  const total = usage.prompt_tokens ?? (hit + miss);",
+                  "  const hitRate = total > 0 ? Math.round((hit / total) * 100) : 0;",
+                  "",
+                  "  console.log('--- DeepSeek Usage ---');",
+                  "  console.log('prompt_tokens:', usage.prompt_tokens);",
+                  "  console.log('completion_tokens:', usage.completion_tokens);",
+                  "  console.log('total_tokens:', usage.total_tokens);",
+                  "  console.log('cache_hit_tokens:', hit);",
+                  "  console.log('cache_miss_tokens:', miss);",
+                  "  console.log('cache_hit_rate:', hitRate + '%');",
+                  "",
+                  "  pm.test('Usage includes cache fields', () => {",
+                  "    pm.expect(usage).to.have.property('prompt_cache_hit_tokens');",
+                  "    pm.expect(usage).to.have.property('prompt_cache_miss_tokens');",
+                  "  });",
+                  "}",
+                  "",
+                  "if (content) {",
+                  "  const recipe = JSON.parse(content);",
+                  "  console.log('Recipe title:', recipe.title);",
+                  "  console.log('Calories:', recipe.calories);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Recipe JSON — Cache Test (run 2x)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{deepseekApiKey}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"{{aiModel}}\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"CACHE_TEST_FIXED_PREFIX — You are a Persian chef. Return only valid JSON with keys: title, description, ingredients, instructions, calories, prepTime, cookTime, servings, category. Numeric fields must be JSON numbers.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Suggest a recipe for: گوجه\"\n    }\n  ],\n  \"response_format\": { \"type\": \"json_object\" },\n  \"temperature\": {{aiTemperature}},\n  \"stream\": false\n}"
+            },
+            "url": "{{deepseekBaseUrl}}/chat/completions",
+            "description": "Send this request **twice in a row** with identical body.\n\n- 1st call: expect `cache_hit_tokens ≈ 0`\n- 2nd call: expect `cache_hit_tokens` high on the system prefix\n\nCheck Postman Console (View → Show Postman Console)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const usage = pm.response.json().usage;",
+                  "if (usage) {",
+                  "  const hit = usage.prompt_cache_hit_tokens ?? 0;",
+                  "  console.log('cache_hit_tokens this request:', hit);",
+                  "  if (hit === 0) {",
+                  "    console.log('Tip: Run this same request again — cache_hit should increase.');",
+                  "  } else {",
+                  "    console.log('Cache is working — prefix was served from disk cache.');",
+                  "  }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Flows",
+      "description": "Run folder with Collection Runner for end-to-end smoke test.",
+      "item": [
+        {
+          "name": "1. Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/health"
+          },
+          "response": []
+        },
+        {
+          "name": "2. Request OTP",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mobileNumber\": \"{{mobileNumber}}\",\n  \"deviceId\": \"{{deviceId}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/otp/request"
+          },
+          "response": []
+        },
+        {
+          "name": "3. Verify OTP",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mobileNumber\": \"{{mobileNumber}}\",\n  \"otpCode\": \"{{otpCode}}\",\n  \"deviceId\": \"{{deviceId}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/auth/otp/verify"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.accessToken) pm.collectionVariables.set('accessToken', body.accessToken);",
+                  "if (body.refreshToken) pm.collectionVariables.set('refreshToken', body.refreshToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4. Generate Recipe",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ingredients\": [\"گوجه\", \"پیاز\"],\n  \"tools\": [\"تابه\"],\n  \"calorieLimit\": 500,\n  \"servings\": 2\n}"
+            },
+            "url": "{{baseUrl}}/api/recipes/generate"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const id = pm.response.json().data?.id;",
+                  "if (id) pm.collectionVariables.set('recipeId', id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5. Get Recipe",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/recipes/{{recipeId}}"
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
