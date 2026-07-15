@@ -1,7 +1,8 @@
 export class AppError extends Error {
-  constructor(message, statusCode = 500) {
+  constructor(message, statusCode = 500, code = undefined) {
     super(message);
     this.statusCode = statusCode;
+    this.code = code;
     this.name = this.constructor.name;
   }
 }
@@ -33,5 +34,19 @@ export class ConflictError extends AppError {
 export class ExternalServiceError extends AppError {
   constructor(message = 'External service failure') {
     super(message, 502);
+  }
+}
+
+export class ContentModerationError extends AppError {
+  constructor(
+    message = 'برخی مواد وارد شده برای پخت غذا مناسب نیست. لطفاً مواد خوردنی واقعی وارد کنید.'
+  ) {
+    super(message, 422, 'FORBIDDEN_INGREDIENTS');
+  }
+}
+
+export class NonPersianTextError extends AppError {
+  constructor(message = 'فقط حروف فارسی مجاز است. عدد فارسی یا انگلیسی مشکلی ندارد.') {
+    super(message, 422, 'NON_PERSIAN_TEXT');
   }
 }

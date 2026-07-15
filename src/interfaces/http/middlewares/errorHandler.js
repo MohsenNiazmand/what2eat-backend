@@ -2,10 +2,16 @@ import { AppError } from '../../../domain/errors/AppError.js';
 
 export function errorHandler(err, req, res, _next) {
   if (err instanceof AppError) {
-    return res.status(err.statusCode).json({
+    const body = {
       success: false,
       message: err.message,
-    });
+    };
+
+    if (err.code) {
+      body.code = err.code;
+    }
+
+    return res.status(err.statusCode).json(body);
   }
 
   console.error(err);

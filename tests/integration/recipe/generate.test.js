@@ -144,6 +144,40 @@ describe('POST /api/recipes/generate', () => {
     expect(persisted.instructions).toEqual(validGeneratedRecipe.instructions);
   });
 
+  it('returns 422 with NON_PERSIAN_TEXT when Latin letters are used', async () => {
+    const accessToken = await getAccessToken();
+
+    const response = await request(app)
+      .post('/api/recipes/generate')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ ingredients: ['tomato'] });
+
+    expect(response.status).toBe(422);
+    expect(response.body).toEqual({
+      success: false,
+      message: 'فقط حروف فارسی مجاز است. عدد فارسی یا انگلیسی مشکلی ندارد.',
+      code: 'NON_PERSIAN_TEXT',
+    });
+    expect(mockGenerate).not.toHaveBeenCalled();
+  });
+
+  it('returns 422 with FORBIDDEN_INGREDIENTS when ingredients are not allowed', async () => {
+    const accessToken = await getAccessToken();
+
+    const response = await request(app)
+      .post('/api/recipes/generate')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ ingredients: ['مدفوع', 'ادرار'] });
+
+    expect(response.status).toBe(422);
+    expect(response.body).toEqual({
+      success: false,
+      message: 'برخی مواد وارد شده برای پخت غذا مناسب نیست. لطفاً مواد خوردنی واقعی وارد کنید.',
+      code: 'FORBIDDEN_INGREDIENTS',
+    });
+    expect(mockGenerate).not.toHaveBeenCalled();
+  });
+
   it('returns 502 when the generator rejects', async () => {
     mockGenerate.mockRejectedValue(new ExternalServiceError('Failed to reach DeepSeek API'));
     const accessToken = await getAccessToken();

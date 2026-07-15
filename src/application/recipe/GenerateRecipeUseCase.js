@@ -1,14 +1,20 @@
 import { ValidationError } from '../../domain/errors/AppError.js';
+import { IngredientGuard } from './IngredientGuard.js';
 
 export class GenerateRecipeUseCase {
-  constructor(promptBuilder, recipeGenerator, recipeRepository) {
+  constructor(promptBuilder, recipeGenerator, recipeRepository, ingredientGuard = new IngredientGuard()) {
     this.promptBuilder = promptBuilder;
     this.recipeGenerator = recipeGenerator;
     this.recipeRepository = recipeRepository;
+    this.ingredientGuard = ingredientGuard;
   }
 
   async execute(input) {
     this._validate(input);
+    this.ingredientGuard.validate({
+      ingredients: input.ingredients,
+      tools: input.tools ?? [],
+    });
 
     const prompt = this.promptBuilder.build(input);
     const generated = await this.recipeGenerator.generate(prompt);

@@ -1,5 +1,5 @@
 import { jest } from '@jest/globals';
-import { ValidationError, ExternalServiceError } from '../../../src/domain/errors/AppError.js';
+import { ValidationError, ExternalServiceError, ContentModerationError, NonPersianTextError } from '../../../src/domain/errors/AppError.js';
 import { GenerateRecipeUseCase } from '../../../src/application/recipe/GenerateRecipeUseCase.js';
 
 const validGeneratedRecipe = {
@@ -95,6 +95,28 @@ describe('GenerateRecipeUseCase', () => {
     const { useCase, recipeRepository } = makeUseCase({ generatorError: error });
 
     await expect(useCase.execute({ ingredients: ['گوجه'] })).rejects.toThrow(ExternalServiceError);
+    expect(recipeRepository.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects forbidden ingredients before calling the generator', async () => {
+    const { useCase, promptBuilder, recipeGenerator, recipeRepository } = makeUseCase();
+
+    await expect(useCase.execute({ ingredients: ['مدفوع', 'پیاز'] })).rejects.toThrow(
+      ContentModerationError
+    );
+
+    expect(promptBuilder.build).not.toHaveBeenCalled();
+    expect(recipeGenerator.generate).not.toHaveBeenCalled();
+    expect(recipeRepository.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects non-Persian text before calling the generator', async () => {
+    const { useCase, promptBuilder, recipeGenerator, recipeRepository } = makeUseCase();
+
+    await expect(useCase.execute({ ingredients: ['tomato'] })).rejects.toThrow(NonPersianTextError);
+
+    expect(promptBuilder.build).not.toHaveBeenCalled();
+    expect(recipeGenerator.generate).not.toHaveBeenCalled();
     expect(recipeRepository.create).not.toHaveBeenCalled();
   });
 });
