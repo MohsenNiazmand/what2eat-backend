@@ -66,6 +66,10 @@ describe('User profile API', () => {
         id: expect.any(String),
         mobileNumber: TEST_MOBILE,
         name: null,
+        recipeOptions: expect.objectContaining({
+          countries: expect.any(Array),
+          dietaryPreferences: expect.any(Array),
+        }),
       },
     });
   });

@@ -17,7 +17,13 @@ export class IngredientGuard {
   }
 
   validate({ ingredients, tools = [] }) {
-    this.persianTextGuard.validate([...ingredients, ...tools]);
+    this.validateRecipeInput({ ingredients, tools });
+  }
+
+  validateRecipeInput({ ingredients = [], tools = [], exclusions = [], notes }) {
+    const noteValues = notes ? [notes] : [];
+
+    this.persianTextGuard.validate([...ingredients, ...tools, ...exclusions, ...noteValues]);
 
     for (const ingredient of ingredients) {
       if (this._isBlocked(ingredient, 'ingredient')) {
@@ -29,6 +35,16 @@ export class IngredientGuard {
       if (this._isBlocked(tool, 'tool')) {
         throw new ContentModerationError();
       }
+    }
+
+    for (const exclusion of exclusions) {
+      if (this._isBlocked(exclusion, 'ingredient')) {
+        throw new ContentModerationError();
+      }
+    }
+
+    if (notes && this._isBlocked(notes, 'ingredient')) {
+      throw new ContentModerationError();
     }
   }
 

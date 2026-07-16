@@ -61,6 +61,14 @@ describe('Auth middleware and session management', () => {
         id: expect.any(String),
         mobileNumber: TEST_MOBILE,
         name: null,
+        recipeOptions: {
+          countries: expect.arrayContaining([
+            expect.objectContaining({ id: 'iran', label: 'ایران', isAvailable: true }),
+          ]),
+          dietaryPreferences: expect.arrayContaining([
+            expect.objectContaining({ id: 'vegan', label: 'وگان', isAvailable: true }),
+          ]),
+        },
       },
     });
   });

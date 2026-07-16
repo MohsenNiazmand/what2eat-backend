@@ -4,6 +4,7 @@ import { SessionRepository } from '../../../infrastructure/database/SessionRepos
 import { TokenService } from '../../../infrastructure/auth/TokenService.js';
 import { AuthService } from '../../../application/auth/AuthService.js';
 import { UpdateProfileUseCase } from '../../../application/user/UpdateProfileUseCase.js';
+import { RecipeOptionsService } from '../../../application/recipe/RecipeOptionsService.js';
 
 const authService = new AuthService(
   new OtpRepository(),
@@ -13,6 +14,7 @@ const authService = new AuthService(
 );
 
 const updateProfileUseCase = new UpdateProfileUseCase(new UserRepository());
+const recipeOptionsService = new RecipeOptionsService();
 
 export async function requestOtp(req, res, next) {
   try {
@@ -42,6 +44,7 @@ export async function me(req, res, next) {
         id: req.user.id,
         mobileNumber: req.user.mobileNumber,
         name: req.user.name,
+        recipeOptions: recipeOptionsService.getOptionsForUser(req.user),
       },
     });
   } catch (error) {

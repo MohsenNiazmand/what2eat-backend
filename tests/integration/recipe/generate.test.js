@@ -87,7 +87,7 @@ describe('POST /api/recipes/generate', () => {
     });
   });
 
-  it('returns 400 when the request body is invalid', async () => {
+  it('returns 400 when the request body has no constraints', async () => {
     const accessToken = await getAccessToken();
 
     const response = await request(app)
@@ -97,7 +97,45 @@ describe('POST /api/recipes/generate', () => {
 
     expect(response.status).toBe(400);
     expect(response.body).toHaveProperty('success', false);
-    expect(response.body).toHaveProperty('message');
+    expect(response.body.message).toContain('حداقل یکی');
+    expect(mockGenerate).not.toHaveBeenCalled();
+  });
+
+  it('returns 201 when only calorieLimit is provided', async () => {
+    const accessToken = await getAccessToken();
+
+    const response = await request(app)
+      .post('/api/recipes/generate')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ calorieLimit: 600, servings: 1 });
+
+    expect(response.status).toBe(201);
+    expect(response.body.success).toBe(true);
+    expect(mockGenerate).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns 201 when only dietaryPreferences is provided', async () => {
+    const accessToken = await getAccessToken();
+
+    const response = await request(app)
+      .post('/api/recipes/generate')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ dietaryPreferences: ['vegan'] });
+
+    expect(response.status).toBe(201);
+    expect(mockGenerate).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns 400 when a pro-only country is selected on free tier', async () => {
+    const accessToken = await getAccessToken();
+
+    const response = await request(app)
+      .post('/api/recipes/generate')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ countries: ['japan'] });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toContain('در نسخه فعلی در دسترس نیست');
     expect(mockGenerate).not.toHaveBeenCalled();
   });
 

@@ -18,7 +18,7 @@ const getRecipeUseCase = new GetRecipeUseCase(recipeRepository);
 
 export async function generateRecipe(req, res, next) {
   try {
-    const result = await generateRecipeUseCase.execute(req.body);
+    const result = await generateRecipeUseCase.execute(req.body, { user: req.user });
     res.status(201).json({ success: true, data: result });
   } catch (error) {
     next(error);

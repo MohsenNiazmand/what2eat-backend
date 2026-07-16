@@ -1,6 +1,12 @@
 import { jest } from '@jest/globals';
-import { ValidationError, ExternalServiceError, ContentModerationError, NonPersianTextError } from '../../../src/domain/errors/AppError.js';
+import {
+  ValidationError,
+  ExternalServiceError,
+  ContentModerationError,
+  NonPersianTextError,
+} from '../../../src/domain/errors/AppError.js';
 import { GenerateRecipeUseCase } from '../../../src/application/recipe/GenerateRecipeUseCase.js';
+import { RecipeOptionsService } from '../../../src/application/recipe/RecipeOptionsService.js';
 
 const validGeneratedRecipe = {
   title: 'غذای تست',
@@ -34,7 +40,13 @@ function makeUseCase({ generatedRecipe = validGeneratedRecipe, generatorError = 
     create: jest.fn().mockResolvedValue(savedRecipe),
   };
 
-  const useCase = new GenerateRecipeUseCase(promptBuilder, recipeGenerator, recipeRepository);
+  const useCase = new GenerateRecipeUseCase(
+    promptBuilder,
+    recipeGenerator,
+    recipeRepository,
+    undefined,
+    new RecipeOptionsService()
+  );
 
   return { useCase, promptBuilder, recipeGenerator, recipeRepository };
 }
@@ -42,22 +54,62 @@ function makeUseCase({ generatedRecipe = validGeneratedRecipe, generatorError = 
 describe('GenerateRecipeUseCase', () => {
   it('builds a prompt, generates a recipe, persists it, and returns the saved recipe with id', async () => {
     const { useCase, promptBuilder, recipeGenerator, recipeRepository } = makeUseCase();
-    const input = { ingredients: ['گوجه', 'پونه'], tools: ['تابه'], calorieLimit: 400, servings: 2 };
+    const input = {
+      ingredients: ['گوجه', 'پونه'],
+      tools: ['تابه'],
+      calorieLimit: 400,
+      servings: 2,
+      countries: ['iran'],
+      dietaryPreferences: ['vegan'],
+      exclusions: ['چلو مرغ'],
+      notes: 'غذای سبک',
+    };
 
     const result = await useCase.execute(input);
 
-    expect(promptBuilder.build).toHaveBeenCalledWith(input);
+    expect(promptBuilder.build).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ingredients: ['گوجه', 'پونه'],
+        tools: ['تابه'],
+        calorieLimit: 400,
+        servings: 2,
+        countries: ['iran'],
+        dietaryPreferences: ['vegan'],
+        exclusions: ['چلو مرغ'],
+        notes: 'غذای سبک',
+      })
+    );
     expect(recipeGenerator.generate).toHaveBeenCalledWith({ system: 'sys', user: 'usr' });
     expect(recipeRepository.create).toHaveBeenCalledWith(validGeneratedRecipe);
     expect(result).toEqual(savedRecipe);
-    expect(result.id).toBe('recipe-uuid-1');
   });
 
   it.each([
-    [undefined, 'ingredients is required and must be a non-empty array'],
-    [[], 'ingredients is required and must be a non-empty array'],
+    [{ dietaryPreferences: ['vegan'] }],
+    [{ countries: ['iran'] }],
+    [{ calorieLimit: 600 }],
+    [{ servings: 2 }],
+    [{ notes: 'غذای سبک با مرغ' }],
+    [{ ingredients: ['گوجه'] }],
+  ])('accepts request when at least one constraint is provided: %p', async (input) => {
+    const { useCase, recipeGenerator } = makeUseCase();
+
+    await expect(useCase.execute(input)).resolves.toEqual(savedRecipe);
+    expect(recipeGenerator.generate).toHaveBeenCalled();
+  });
+
+  it('throws ValidationError when no constraint is provided', async () => {
+    const { useCase } = makeUseCase();
+
+    await expect(useCase.execute({})).rejects.toThrow(ValidationError);
+    await expect(useCase.execute({ ingredients: [], exclusions: ['چلو مرغ'] })).rejects.toThrow(
+      ValidationError
+    );
+  });
+
+  it.each([
     [['گوجه', 123], 'ingredients must contain only strings'],
-    ['not-an-array', 'ingredients is required and must be a non-empty array'],
+    ['not-an-array', 'ingredients must be an array of strings'],
   ])('throws ValidationError for invalid ingredients: %p', async (ingredients, message) => {
     const { useCase } = makeUseCase();
 
@@ -72,23 +124,32 @@ describe('GenerateRecipeUseCase', () => {
     await expect(useCase.execute({ ingredients: ['گوجه'], tools: ['تابه', 1] })).rejects.toThrow(ValidationError);
   });
 
-  it.each([0, -100, '400'])(
-    'throws ValidationError when calorieLimit is invalid: %p',
-    async (calorieLimit) => {
-      const { useCase } = makeUseCase();
+  it.each([0, -100, '400'])('throws ValidationError when calorieLimit is invalid: %p', async (calorieLimit) => {
+    const { useCase } = makeUseCase();
 
-      await expect(useCase.execute({ ingredients: ['گوجه'], calorieLimit })).rejects.toThrow(ValidationError);
-    }
-  );
+    await expect(useCase.execute({ calorieLimit })).rejects.toThrow(ValidationError);
+  });
 
-  it.each([0, -1, 1.5, '2'])(
-    'throws ValidationError when servings is invalid: %p',
-    async (servings) => {
-      const { useCase } = makeUseCase();
+  it.each([0, -1, 1.5, '2'])('throws ValidationError when servings is invalid: %p', async (servings) => {
+    const { useCase } = makeUseCase();
 
-      await expect(useCase.execute({ ingredients: ['گوجه'], servings })).rejects.toThrow(ValidationError);
-    }
-  );
+    await expect(useCase.execute({ servings })).rejects.toThrow(ValidationError);
+  });
+
+  it('throws ValidationError for unknown country or unavailable pro-only country', async () => {
+    const { useCase } = makeUseCase();
+
+    await expect(useCase.execute({ countries: ['atlantis'] })).rejects.toThrow('کشور نامعتبر');
+    await expect(useCase.execute({ countries: ['japan'] })).rejects.toThrow('در نسخه فعلی در دسترس نیست');
+  });
+
+  it('throws ValidationError for unknown dietary preference', async () => {
+    const { useCase } = makeUseCase();
+
+    await expect(useCase.execute({ dietaryPreferences: ['paleo'] })).rejects.toThrow(
+      'ترجیح غذایی نامعتبر'
+    );
+  });
 
   it('propagates ExternalServiceError from the generator without persisting', async () => {
     const error = new ExternalServiceError('Failed to reach DeepSeek API');

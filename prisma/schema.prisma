@@ -14,7 +14,6 @@ model User {
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
   sessions     Session[]
-  preferences  Preference?
   favorites    Favorite[]
 }
 
@@ -26,15 +25,6 @@ model Session {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
   createdAt DateTime @default(now())
-}
-
-model Preference {
-  id                 String   @id @default(uuid())
-  userId             String   @unique
-  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  dietaryRestrictions String[] // e.g. ["Vegan", "Gluten-free"]
-  preferredCuisines   String[] // e.g. ["Persian", "Italian"]
-  updatedAt          DateTime @updatedAt
 }
 
 model Recipe {

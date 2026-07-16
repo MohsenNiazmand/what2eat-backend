@@ -1,6 +1,6 @@
 # What2Eat (چی بخورم)
 
-What2Eat is a REST API backend for an AI-powered Persian cooking assistant. Users authenticate with a mobile OTP, manage dietary preferences, generate recipes from available ingredients using an AI provider, browse and search saved recipes, and maintain a favorites list.
+What2Eat is a REST API backend for an AI-powered Persian cooking assistant. Users authenticate with a mobile OTP, load recipe options from `/api/auth/me`, generate recipes via AI with flexible constraints, browse and search saved recipes, and maintain a favorites list.
 
 The project follows **Clean Architecture** with **TDD** (Test-Driven Development) and is designed for incremental, phase-based development.
 
@@ -21,6 +21,8 @@ The project follows **Clean Architecture** with **TDD** (Test-Driven Development
 - [Testing](#testing)
 - [Postman Collection](#postman-collection)
 - [Error Handling](#error-handling)
+- [Recipe Input Moderation](#recipe-input-moderation)
+- [Flutter Client](#flutter-client)
 - [Development Conventions](#development-conventions)
 - [Development History](#development-history)
 
@@ -83,7 +85,7 @@ The codebase is organized into four layers with strict dependency direction: **i
 
 ### Key Design Patterns
 
-- **Ports & Adapters**: `IRecipeGenerator`, `IRecipeRepository`, `IPreferenceRepository`, `IFavoriteRepository` define contracts; infrastructure provides implementations.
+- **Ports & Adapters**: `IRecipeGenerator`, `IRecipeRepository`, `IFavoriteRepository` define contracts; infrastructure provides implementations.
 - **Use Cases**: Single-purpose classes (`GenerateRecipeUseCase`, `ListRecipesUseCase`, etc.) encapsulate one operation each.
 - **Factory**: `createRecipeGenerator()` wires the AI client from environment config.
 - **Centralized Error Handling**: `errorHandler` middleware maps `AppError` subclasses to HTTP status codes.
@@ -95,7 +97,7 @@ The codebase is organized into four layers with strict dependency direction: **i
 ```
 what2eat-backend/
 ├── prisma/
-│   ├── schema.prisma          # Database schema (User, Session, Preference, Recipe, Favorite)
+│   ├── schema.prisma          # Database schema (User, Session, Recipe, Favorite)
 │   └── migrations/            # Prisma migration history
 ├── postman/
 │   ├── What2Eat-API.postman_collection.json
@@ -103,22 +105,24 @@ what2eat-backend/
 ├── src/
 │   ├── domain/
 │   │   └── errors/
-│   │       └── AppError.js    # ValidationError, UnauthorizedError, NotFoundError, ConflictError, ExternalServiceError
+│   │       └── AppError.js    # ValidationError, UnauthorizedError, NotFoundError, ConflictError, ExternalServiceError, ContentModerationError, NonPersianTextError
 │   ├── application/
 │   │   ├── auth/
 │   │   │   └── AuthService.js           # OTP request/verify, token refresh, logout
 │   │   ├── user/
 │   │   │   └── UpdateProfileUseCase.js  # Update user display name
-│   │   ├── preference/
-│   │   │   ├── IPreferenceRepository.js
-│   │   │   └── PreferenceService.js     # CRUD for dietary preferences
 │   │   ├── favorite/
 │   │   │   ├── IFavoriteRepository.js
 │   │   │   └── FavoriteService.js       # Add, remove, list favorites
 │   │   └── recipe/
+│   │       ├── recipeOptionsConfig.js   # Static countries & dietary options
+│   │       ├── RecipeOptionsService.js  # isAvailable per user tier
 │   │       ├── IRecipeGenerator.js      # AI generation port
 │   │       ├── IRecipeRepository.js     # Recipe persistence port
 │   │       ├── PromptBuilder.js         # Builds Persian AI prompts
+│   │       ├── PersianTextGuard.js      # Rejects Latin letters in inputs
+│   │       ├── IngredientGuard.js       # Blocked-term moderation
+│   │       ├── blockedIngredientTerms.js
 │   │       ├── GenerateRecipeUseCase.js
 │   │       ├── ListRecipesUseCase.js
 │   │       └── GetRecipeUseCase.js
@@ -134,7 +138,6 @@ what2eat-backend/
 │   │   │   ├── prisma.js
 │   │   │   ├── UserRepository.js
 │   │   │   ├── SessionRepository.js
-│   │   │   ├── PreferenceRepository.js
 │   │   │   ├── RecipeRepository.js
 │   │   │   └── FavoriteRepository.js
 │   │   └── redis/
@@ -143,7 +146,7 @@ what2eat-backend/
 │   └── interfaces/http/
 │       ├── app.js             # Express setup (helmet, cors, morgan, routes)
 │       ├── server.js          # Entry point, reads PORT from env
-│       ├── controllers/       # authController, recipeController, preferenceController, favoriteController
+│       ├── controllers/       # authController, recipeController, favoriteController
 │       ├── middlewares/
 │       │   ├── auth.middleware.js
 │       │   └── errorHandler.js
@@ -152,12 +155,13 @@ what2eat-backend/
 │           ├── health.js
 │           ├── auth.js
 │           ├── recipes.js
-│           ├── preferences.js
 │           └── favorites.js
+├── docs/
+│   └── flutter-client-integration.md
 ├── tests/
 │   ├── setup.js               # Sets JWT_SECRET for test runs
 │   ├── health.test.js
-│   ├── integration/           # End-to-end API tests (auth, recipes, preferences, favorites, profile)
+│   ├── integration/           # End-to-end API tests (auth, recipes, favorites, profile)
 │   └── unit/                  # Isolated tests (use cases, services, AI config, prompt builder)
 ├── .env.example
 ├── docker-compose.yml
@@ -180,7 +184,7 @@ Defined in `prisma/schema.prisma`:
 | `name` | String? | Optional display name |
 | `createdAt` / `updatedAt` | DateTime | Auto-managed |
 
-Relations: `sessions`, `preferences` (1:1), `favorites` (1:N).
+Relations: `sessions`, `favorites` (1:N).
 
 ### Session
 | Field | Type | Notes |
@@ -192,15 +196,6 @@ Relations: `sessions`, `preferences` (1:1), `favorites` (1:N).
 | `expiresAt` | DateTime | Refresh token expiry |
 
 **Single-session policy**: On each successful OTP verification, all existing sessions for that user are deleted before creating a new one.
-
-### Preference
-| Field | Type | Notes |
-|-------|------|-------|
-| `id` | UUID | Primary key |
-| `userId` | UUID | Unique FK → User |
-| `dietaryRestrictions` | String[] | e.g. `["Vegan", "Gluten-free"]` |
-| `preferredCuisines` | String[] | e.g. `["Persian", "Italian"]` |
-| `updatedAt` | DateTime | Auto-managed |
 
 ### Recipe
 | Field | Type | Notes |
@@ -244,32 +239,27 @@ Unique constraint on `(userId, recipeId)` — a user cannot favorite the same re
 - **Logout**: Deletes the session for the current user + device.
 - **Protected routes**: Require `Authorization: Bearer <accessToken>` header.
 
-### 3. User Profile
-- **GET /api/auth/me**: Returns authenticated user's `id`, `mobileNumber`, `name`.
+### 3. User Profile & Recipe Options
+- **GET /api/auth/me**: Returns `id`, `mobileNumber`, `name`, and `recipeOptions` (countries + dietary preferences with `isAvailable`).
 - **PATCH /api/auth/me**: Updates the user's display `name`.
 
-### 4. Preferences
-- Per-user dietary restrictions and preferred cuisines.
-- **GET**: Returns existing preferences (404 if none set).
-- **PUT**: Creates or updates preferences (upsert).
-- **DELETE**: Removes preferences record.
+### 4. AI Recipe Generation
+- **POST /api/recipes/generate**: Flexible constraints; calls AI; persists and returns the recipe.
+- At least one of: `countries`, `dietaryPreferences`, `ingredients`, `calorieLimit`, `servings`, `notes`.
+- Optional: `tools`, `exclusions`.
+- Prioritizes authentic dishes from selected countries; global cuisine when none selected.
+- Output is in **Persian** JSON.
 
-### 5. AI Recipe Generation
-- **POST /api/recipes/generate**: Accepts available ingredients and optional constraints; calls AI; persists and returns the recipe.
-- Input: `ingredients` (required), `tools`, `calorieLimit`, `servings` (all optional).
-- Output is always in **Persian** with traditional Iranian dish names when applicable.
-- AI response is validated against a strict JSON schema before saving.
-
-### 6. Recipe Listing & Search
+### 5. Recipe Listing & Search
 - **GET /api/recipes**: Paginated list with optional text search (`q`) and category filter.
 - Search matches `title` and `description` (case-insensitive).
 - Default pagination: `page=1`, `limit=20` (max 100).
 - Results ordered by `createdAt` descending.
 
-### 7. Recipe Detail
+### 6. Recipe Detail
 - **GET /api/recipes/:id**: Returns full recipe by UUID.
 
-### 8. Favorites
+### 7. Favorites
 - **GET /api/favorites**: Lists user's favorites with embedded recipe data.
 - **POST /api/favorites**: Adds a recipe to favorites (`recipeId` in body). Returns 409 if already favorited.
 - **DELETE /api/favorites/:recipeId**: Removes a favorite. Returns 404 if not found.
@@ -302,6 +292,18 @@ Errors:
 }
 ```
 
+Some errors (especially recipe input moderation) also include a machine-readable `code`:
+
+```json
+{
+  "success": false,
+  "message": "فقط حروف فارسی مجاز است. عدد فارسی یا انگلیسی مشکلی ندارد.",
+  "code": "NON_PERSIAN_TEXT"
+}
+```
+
+Mobile clients **must** branch on `code` when present, not only on HTTP status or `message`.
+
 ### Endpoints Summary
 
 | Method | Path | Auth | Description |
@@ -311,14 +313,11 @@ Errors:
 | `POST` | `/api/auth/otp/verify` | No | Verify OTP, get tokens |
 | `POST` | `/api/auth/refresh` | No | Refresh access token |
 | `POST` | `/api/auth/logout` | Yes | Invalidate session |
-| `GET` | `/api/auth/me` | Yes | Get current user |
+| `GET` | `/api/auth/me` | Yes | Get current user + recipe options |
 | `PATCH` | `/api/auth/me` | Yes | Update user name |
 | `GET` | `/api/recipes` | Yes | List/search recipes |
 | `GET` | `/api/recipes/:id` | Yes | Get recipe by ID |
 | `POST` | `/api/recipes/generate` | Yes | Generate recipe via AI |
-| `GET` | `/api/preferences` | Yes | Get user preferences |
-| `PUT` | `/api/preferences` | Yes | Create/update preferences |
-| `DELETE` | `/api/preferences` | Yes | Delete preferences |
 | `GET` | `/api/favorites` | Yes | List favorites |
 | `POST` | `/api/favorites` | Yes | Add favorite |
 | `DELETE` | `/api/favorites/:recipeId` | Yes | Remove favorite |
@@ -436,10 +435,20 @@ Errors:
   "data": {
     "id": "uuid",
     "mobileNumber": "09123456789",
-    "name": "Ali"
+    "name": "Ali",
+    "recipeOptions": {
+      "countries": [
+        { "id": "iran", "label": "ایران", "isAvailable": true }
+      ],
+      "dietaryPreferences": [
+        { "id": "vegan", "label": "وگان", "isAvailable": true }
+      ]
+    }
   }
 }
 ```
+
+Use `recipeOptions` to build country/dietary pickers. `isAvailable: false` means locked for the current user tier.
 
 ---
 
@@ -472,22 +481,62 @@ Errors:
 
 **Headers:** `Authorization: Bearer <accessToken>`
 
-**Request:**
+**Request examples:**
+
+Calorie-only:
+```json
+{ "calorieLimit": 600, "servings": 1 }
+```
+
+With ingredients and exclusions:
 ```json
 {
-  "ingredients": ["گوجه", "پیاز", "تخم‌مرغ"],
-  "tools": ["تابه", "قاشق"],
+  "countries": ["iran"],
+  "dietaryPreferences": ["vegan"],
+  "ingredients": ["مرغ", "پیاز"],
+  "tools": ["تابه"],
   "calorieLimit": 500,
-  "servings": 2
+  "servings": 2,
+  "exclusions": ["چلو مرغ", "سالاد الویه"],
+  "notes": "غذای اصلی، تند نباشد"
 }
 ```
 
 | Field | Required | Type | Notes |
 |-------|----------|------|-------|
-| `ingredients` | Yes | `string[]` | Non-empty array of ingredient names |
+| `countries` | At least one field* | `string[]` | IDs from `recipeOptions.countries` |
+| `dietaryPreferences` | At least one field* | `string[]` | IDs from `recipeOptions.dietaryPreferences` |
+| `ingredients` | At least one field* | `string[]` | Pantry mode when non-empty |
+| `calorieLimit` | At least one field* | `number` | Max total calories for the whole dish |
+| `servings` | At least one field* | `integer` | Target number of portions |
+| `notes` | At least one field* | `string` | Free-form user notes (max 500 chars) |
 | `tools` | No | `string[]` | Available cooking tools |
-| `calorieLimit` | No | `number` | Max total calories for the whole dish |
-| `servings` | No | `integer` | Target number of portions |
+| `exclusions` | No | `string[]` | Dish names to avoid |
+
+\*At least **one** of the starred fields must be provided.
+
+**Input rules (enforced before AI):**
+- User text fields (`ingredients`, `tools`, `exclusions`, `notes`) must **not** contain Latin letters. Digits (Persian or ASCII) are allowed.
+- Blocked Persian terms return `422 FORBIDDEN_INGREDIENTS`.
+- Unknown or locked country/dietary IDs return `400`.
+
+**Response 422 — non-Persian text:**
+```json
+{
+  "success": false,
+  "message": "فقط حروف فارسی مجاز است. عدد فارسی یا انگلیسی مشکلی ندارد.",
+  "code": "NON_PERSIAN_TEXT"
+}
+```
+
+**Response 422 — forbidden ingredient/tool:**
+```json
+{
+  "success": false,
+  "message": "برخی مواد وارد شده برای پخت غذا مناسب نیست. لطفاً مواد خوردنی واقعی وارد کنید.",
+  "code": "FORBIDDEN_INGREDIENTS"
+}
+```
 
 **Response 201:**
 ```json
@@ -552,55 +601,6 @@ Errors:
 **Response 200:** Full recipe object (same shape as generate response).
 
 **Response 404:** `{ "success": false, "message": "Recipe not found" }`
-
----
-
-### `GET /api/preferences`
-
-**Headers:** `Authorization: Bearer <accessToken>`
-
-**Response 200:**
-```json
-{
-  "success": true,
-  "data": {
-    "id": "uuid",
-    "dietaryRestrictions": ["Vegan"],
-    "preferredCuisines": ["Persian", "Italian"],
-    "updatedAt": "2026-07-15T10:00:00.000Z"
-  }
-}
-```
-
----
-
-### `PUT /api/preferences`
-
-**Headers:** `Authorization: Bearer <accessToken>`
-
-**Request:**
-```json
-{
-  "dietaryRestrictions": ["Vegan", "Gluten-free"],
-  "preferredCuisines": ["Persian"]
-}
-```
-
-Both fields are required arrays of strings. Creates or updates the user's preference record.
-
----
-
-### `DELETE /api/preferences`
-
-**Headers:** `Authorization: Bearer <accessToken>`
-
-**Response 200:**
-```json
-{
-  "success": true,
-  "message": "Preferences deleted successfully"
-}
-```
 
 ---
 
@@ -728,6 +728,12 @@ Request body
     │
     ▼
 GenerateRecipeUseCase._validate()
+    │
+    ▼
+PersianTextGuard.validate()    → 422 NON_PERSIAN_TEXT if Latin letters
+    │
+    ▼
+IngredientGuard.validate()     → 422 FORBIDDEN_INGREDIENTS if blocked term
     │
     ▼
 PromptBuilder.build()          → { system, user } Persian prompts
@@ -900,14 +906,44 @@ In development, OTP is always `123456`.
 
 All application errors extend `AppError`:
 
-| Error Class | HTTP Status | When |
-|-------------|-------------|------|
-| `ValidationError` | 400 | Invalid input (missing fields, wrong types) |
-| `UnauthorizedError` | 401 | Invalid/expired OTP, token, or session |
-| `NotFoundError` | 404 | Resource not found (recipe, preference, favorite) |
-| `ConflictError` | 409 | Duplicate favorite |
-| `ExternalServiceError` | 502 | AI provider failure or invalid response |
-| Unhandled | 500 | Unexpected server error |
+| Error Class | HTTP Status | `code` | When |
+|-------------|-------------|--------|------|
+| `ValidationError` | 400 | — | Invalid input (missing fields, wrong types) |
+| `UnauthorizedError` | 401 | — | Invalid/expired OTP, token, or session |
+| `NotFoundError` | 404 | — | Resource not found (recipe, preference, favorite) |
+| `ConflictError` | 409 | — | Duplicate favorite |
+| `NonPersianTextError` | 422 | `NON_PERSIAN_TEXT` | Latin letters in ingredient/tool strings |
+| `ContentModerationError` | 422 | `FORBIDDEN_INGREDIENTS` | Blocked ingredient or non-kitchen tool term |
+| `ExternalServiceError` | 502 | — | AI provider failure or invalid response |
+| Unhandled | 500 | — | Unexpected server error |
+
+Moderation messages are in **Persian**; most other API messages are in English.
+
+---
+
+## Recipe Input Moderation
+
+Implemented in `src/application/recipe/`:
+
+| Component | Role |
+|-----------|------|
+| `PersianTextGuard` | Rejects any ingredient/tool string containing Latin letters |
+| `IngredientGuard` | Matches against `blockedIngredientTerms.js` (Persian-only lexicon) + regex patterns for family possessives |
+| `blockedIngredientTerms.js` | Large maintainable blocklist: profanity, body waste, family/people, drugs, alcohol, medication, religious figures, public figures, non-food objects, dangerous substances, non-kitchen tools |
+
+Animal names used as **food** (e.g. `مرغ`, `گوسفند`, `ماهی`) are **allowed**. Validation runs **before** the AI call so rejected requests do not incur API cost.
+
+---
+
+## Flutter Client
+
+See **[docs/flutter-client-integration.md](./docs/flutter-client-integration.md)** for:
+
+- Full error-handling spec (`NON_PERSIAN_TEXT`, `FORBIDDEN_INGREDIENTS`)
+- Dio/`ApiError` examples
+- Separate moderation UI vs recipe result UI
+- `FilteringTextInputFormatter` for ingredient/tool fields (Persian letters + space only on device)
+- Emulator networking notes (adb reverse, Genymotion)
 
 ---
 
@@ -937,3 +973,4 @@ The project was built in phases:
 | **Phase 3** | AI recipe generation, PromptBuilder, DeepSeek/OpenAI-compatible client | `feat(recipe): add PromptBuilder service`, `feat(recipes): add POST /api/recipes/generate` |
 | **Phase 4** | Recipe listing, search, get-by-id, favorites | `feat(recipes): add recipe listing, search, and get-by-id`, `feat(favorites): add favorites add/remove/list API` |
 | **Refactor** | Provider-agnostic AI layer, improved prompts, Postman collection | `Refactor AI layer to support any OpenAI-compatible provider`, `feat: Improve PromptBuilder and AI client` |
+| **Moderation** | Persian-only input guard, blocked-ingredient lexicon, Flutter error codes | `Add recipe input moderation with Persian-only text and blocked-ingredient guards` |

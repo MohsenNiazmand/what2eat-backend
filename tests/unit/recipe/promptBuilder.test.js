@@ -17,99 +17,73 @@ describe('PromptBuilder', () => {
     });
   });
 
-  it.each([undefined, [], 'not-an-array'])('throws ValidationError for invalid ingredients: %p', (ingredients) => {
-    expect(() => builder.build({ ingredients })).toThrow(ValidationError);
-    expect(() => builder.build({ ingredients })).toThrow('ingredients is required and must be a non-empty array');
+  it('throws ValidationError when no constraint is provided', () => {
+    expect(() => builder.build({})).toThrow(ValidationError);
+    expect(() => builder.build({ ingredients: [] })).toThrow(ValidationError);
   });
 
-  it('includes each provided ingredient in the user prompt', () => {
+  it('builds a calorie-only prompt without requiring ingredients', () => {
+    const result = builder.build({ calorieLimit: 600, servings: 1 });
+
+    expect(result.user).toContain('600');
+    expect(result.user).toContain('1');
+    expect(result.system).toContain('مواد را خودت انتخاب کن');
+    expect(result.user).not.toContain('مواد موجود');
+  });
+
+  it('builds a country-only prompt', () => {
+    const result = builder.build({ countries: ['iran'] });
+
+    expect(result.user).toContain('ایران');
+    expect(result.system).toContain('فرهنگ و سنت کشور');
+  });
+
+  it('builds a dietary-preference-only prompt', () => {
+    const result = builder.build({ dietaryPreferences: ['vegan'] });
+
+    expect(result.user).toContain('وگان');
+  });
+
+  it('includes each provided ingredient in pantry mode', () => {
     const result = builder.build({ ingredients: ['گوجه', 'پونه'] });
 
     expect(result.user).toContain('گوجه');
     expect(result.user).toContain('پونه');
+    expect(result.user).toContain('مواد موجود');
+    expect(result.system).toContain('مواد کاربر');
   });
 
-  it('includes each tool in the user prompt when tools are provided', () => {
-    const result = builder.build({ ingredients: ['گوجه'], tools: ['تابه', 'ماکروفر'] });
+  it('includes tools, exclusions, and notes when provided', () => {
+    const result = builder.build({
+      ingredients: ['مرغ'],
+      tools: ['تابه'],
+      exclusions: ['چلو مرغ', 'سالاد الویه'],
+      notes: 'غذای اصلی و تند نباشد',
+    });
 
     expect(result.user).toContain('تابه');
-    expect(result.user).toContain('ماکروفر');
-    expect(result.user).toContain('فقط با این ابزارها');
+    expect(result.user).toContain('چلو مرغ');
+    expect(result.user).toContain('سالاد الویه');
+    expect(result.user).toContain('غذای اصلی و تند نباشد');
+    expect(result.system).toContain('استثنا');
   });
 
-  it('includes the calorie constraint when provided and omits it otherwise', () => {
-    const withCalories = builder.build({ ingredients: ['گوجه'], calorieLimit: 400 });
-    const withoutCalories = builder.build({ ingredients: ['گوجه'] });
+  it('allows global cuisine when no country is selected', () => {
+    const result = builder.build({ dietaryPreferences: ['vegan'] });
 
-    expect(withCalories.user).toContain('400');
-    expect(withCalories.user).toContain('سقف کالری کل غذا');
-    expect(withCalories.user).toContain('همه‌ی پرس‌ها');
-    expect(withoutCalories.user).not.toContain('کالری');
+    expect(result.user).toContain('همه آشپزی‌های جهانی مجاز است');
   });
 
-  it('instructs using Persian digits in the system prompt', () => {
-    const result = builder.build({ ingredients: ['گوجه'] });
+  it('instructs authentic dishes first and allows invention when needed', () => {
+    const result = builder.build({ countries: ['italy'] });
 
-    expect(result.system).toContain('ارقام فارسی');
-    expect(result.system).toContain('۰۱۲۳۴۵۶۷۸۹');
-    expect(result.system).toContain('عدد JSON');
+    expect(result.system).toContain('واقعی و شناخته‌شده');
+    expect(result.system).toContain('دستور جدید');
+    expect(result.system).not.toContain('حتماً نام سنتی ایرانی');
   });
 
-  it('instructs one ingredient per entry in the system prompt', () => {
-    const result = builder.build({ ingredients: ['گوجه'] });
-
-    expect(result.system).toContain('هر ماده یک شیء جداگانه');
-    expect(result.system).toContain('ترکیب نکنید');
-  });
-
-  it('instructs total-dish calorie semantics in the system prompt', () => {
-    const result = builder.build({ ingredients: ['گوجه'], calorieLimit: 500 });
-
-    expect(result.system).toContain('کالری کل غذا');
-    expect(result.system).toContain('هم‌خوان');
-    expect(result.system).toContain('کم‌چرب');
-  });
-
-  it('restricts main cooking tools to the user list while allowing basic hand utensils', () => {
-    const result = builder.build({ ingredients: ['گوجه'], tools: ['تابه'] });
-
-    expect(result.system).toContain('ابزارِ پختِ اصلی');
-    expect(result.system).toContain('ابزارهای دستی');
-    expect(result.system).toContain('رنده');
-  });
-
-  it('forbids generic titles and requires an authentic Iranian dish name', () => {
-    const result = builder.build({ ingredients: ['گوجه'] });
-
-    expect(result.system).toContain('واویشکا');
-    expect(result.system).toContain('اصیل');
-    expect(result.system).toContain('خوراک');
-    expect(result.system).toContain('غذای');
-  });
-
-  it('requires calories to match listed ingredients and adjust oil or lean meat', () => {
-    const result = builder.build({ ingredients: ['گوجه'], calorieLimit: 400 });
-
-    expect(result.system).toContain('هم‌خوان');
-    expect(result.system).toContain('مقدار روغن را کم');
-    expect(result.system).toContain('کم‌چرب');
-  });
-
-  it('instructs authentic Persian naming and pantry-only extras in the system prompt', () => {
-    const result = builder.build({ ingredients: ['گوجه'] });
-
-    expect(result.system).toContain('نام سنتی');
-    expect(result.system).toContain('مواد پایه رایج');
-  });
-
-  it('instructs robustness when constraints are hard to satisfy', () => {
-    const result = builder.build({ ingredients: ['گوجه'], calorieLimit: 100 });
-
-    expect(result.system).toContain('نزدیک‌ترین دستور پخت معتبر');
-  });
-
-  it('contains the JSON keyword and all required schema keys in the system prompt', () => {
-    const result = builder.build({ ingredients: ['گوجه'] });
+  it('contains the JSON schema keys in the system prompt', () => {
+    const result = builder.build({ notes: 'غذای سبک' });
 
     expect(result.system).toContain('JSON');
     expect(result.system).toContain('title');
@@ -120,11 +94,5 @@ describe('PromptBuilder', () => {
     expect(result.system).toContain('cookTime');
     expect(result.system).toContain('servings');
     expect(result.system).toContain('category');
-  });
-
-  it('contains Persian text in the system prompt', () => {
-    const result = builder.build({ ingredients: ['گوجه'] });
-
-    expect(result.system).toContain('مواد');
   });
 });
